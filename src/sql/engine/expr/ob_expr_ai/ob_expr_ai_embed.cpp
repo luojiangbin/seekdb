@@ -18,6 +18,7 @@
 #include "ob_expr_ai_embed.h"
 #include "query/ai/ob_ai_endpoint_resolver.h"
 #include "share/rc/ob_server_runtime.h"
+#include "oblib/common/json_type/ob_json_base.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -128,7 +129,24 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
       ObAIFuncModel model(temp_allocator, *info, *endpoint_info);
       ObString result;
       if (OB_FAIL(model.call_dense_embedding(content, config, result))) {
-      } else if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res, result))) {
+      } else if (result.empty()) {
+        ret = OB_INVALID_DATA;
+        LOG_USER_ERROR(OB_INVALID_DATA, "ai_embed, embedding result is empty");
+        res.set_null();
+      } else {
+        // 返回结果必须是合法 JSON 数组；指定 dimension 时向量维度必须一致
+        ObIJsonBase *j_base = nullptr;
+        if (OB_FAIL(ObJsonBaseFactory::get_json_base(&temp_allocator, result,
+                                                     ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, j_base))) {
+          LOG_USER_ERROR(OB_INVALID_DATA, "ai_embed, embedding result is not valid json");
+        } else if (OB_ISNULL(j_base) || j_base->json_type() != ObJsonNodeType::J_ARRAY) {
+          ret = OB_INVALID_DATA;
+          LOG_USER_ERROR(OB_INVALID_DATA, "ai_embed, embedding result is not a json array");
+        } else if (dim > 0 && j_base->element_count() != static_cast<uint64_t>(dim)) {
+          ret = OB_INVALID_DATA;
+          LOG_USER_ERROR(OB_INVALID_DATA, "ai_embed, embedding dimension does not match the dimension parameter");
+        } else if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res, result))) {
+        }
       }
     }
   }
