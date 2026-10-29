@@ -32,12 +32,13 @@ namespace oceanbase
 namespace sql
 {
 
-// 每次查询的状态：整个文件内容 + 已解析的行 + 当前行号
-struct ObExprReadCSVCtx
+// Per-query state: whole file content, parsed lines and current row cursor.
+struct ObExprReadCSVCtx : public ObExprOperatorCtx
 {
   ObExprReadCSVCtx() : content_(), rows_(), curr_row_(0), loaded_(false) {}
-  ObString content_;             // 文件全文（含所有权在 ctx 的 block 中）
-  ObArray<ObString> rows_;       // 每行原文
+  virtual ~ObExprReadCSVCtx() = default;
+  ObString content_;
+  ObArray<ObString> rows_;
   int64_t curr_row_;
   bool loaded_;
   TO_STRING_KV(K_(loaded), K_(curr_row), KP(content_.ptr()), K(content_.length()));
@@ -80,14 +81,17 @@ int ObExprReadCSV::calc_result_typeN(ObExprResType &type,
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "read_csv, options must be a string or json");
     }
     if (OB_SUCC(ret)) {
-      type.set_json();
-      type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
+      // Each row is returned as a JSON array text, e.g. ["1","alice","90"]
+      type.set_varchar();
+      type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      type.set_collation_level(CS_LEVEL_IMPLICIT);
+      type.set_length(4096);
     }
   }
   return ret;
 }
 
-// 读取整个文件到 alloc 中
+// Read whole file into alloc; NUL terminated.
 static int read_whole_file(ObIAllocator &alloc, const ObString &path, ObString &content)
 {
   int ret = OB_SUCCESS;
@@ -128,9 +132,10 @@ static int read_whole_file(ObIAllocator &alloc, const ObString &path, ObString &
   return ret;
 }
 
-// 拆分 CSV：按行切分（支持 \r\n），返回每行原文
+// Split content into lines (supports \r\n).
 static int split_lines(ObIAllocator &alloc, const ObString &content, ObArray<ObString> &rows)
 {
+  UNUSED(alloc);
   int ret = OB_SUCCESS;
   const char *ptr = content.ptr();
   int64_t len = content.length();
@@ -153,7 +158,7 @@ static int split_lines(ObIAllocator &alloc, const ObString &content, ObArray<ObS
   return ret;
 }
 
-// 把一行 CSV 拆成字段数组（支持双引号包裹与 "" 转义）
+// Split one CSV line into fields (supports double-quoted fields and "" escape).
 static int parse_csv_fields(ObIAllocator &alloc, const ObString &line, ObJsonArray *&array)
 {
   int ret = OB_SUCCESS;
@@ -165,9 +170,7 @@ static int parse_csv_fields(ObIAllocator &alloc, const ObString &line, ObJsonArr
     int64_t pos = 0;
     while (OB_SUCC(ret) && pos <= len) {
       ObStringBuffer field(&alloc);
-      bool quoted = false;
       if (pos < len && ptr[pos] == '"') {
-        quoted = true;
         ++pos;
         while (pos < len) {
           if (ptr[pos] == '"') {
@@ -185,7 +188,6 @@ static int parse_csv_fields(ObIAllocator &alloc, const ObString &line, ObJsonArr
             ++pos;
           }
         }
-        // 跳过引号后到分隔符的空白
         while (pos < len && ptr[pos] != ',') {
           ++pos;
         }
@@ -197,8 +199,7 @@ static int parse_csv_fields(ObIAllocator &alloc, const ObString &line, ObJsonArr
         if (OB_FAIL(field.append(ptr + start, static_cast<int32_t>(pos - start)))) {
         }
       }
-      if (OB_FAIL(ret)) {
-      } else {
+      if (OB_SUCC(ret)) {
         ObJsonString *json_str = nullptr;
         ObString value = field.string();
         if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(alloc, value, json_str))) {
@@ -206,7 +207,7 @@ static int parse_csv_fields(ObIAllocator &alloc, const ObString &line, ObJsonArr
         }
       }
       if (OB_SUCC(ret)) {
-        ++pos;  // 跳过分隔符
+        ++pos;
       }
     }
     if (OB_SUCC(ret)) {
@@ -236,7 +237,6 @@ int ObExprReadCSV::eval_read_csv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   }
   if (OB_FAIL(ret)) {
   } else if (!csv_ctx->loaded_) {
-    // 首次调用：读取文件并解析行
     ObString path = path_datum->get_string();
     ObString secure_file_priv;
     ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
@@ -260,11 +260,14 @@ int ObExprReadCSV::eval_read_csv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     ObString row_line = csv_ctx->rows_.at(csv_ctx->curr_row_);
     if (OB_FAIL(parse_csv_fields(temp_alloc, row_line, fields))) {
     } else {
-      ObString raw_str;
-      if (OB_FAIL(fields->get_raw_binary(raw_str, &ctx.exec_ctx_.get_allocator()))) {
-      } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_str))) {
+      ObStringBuffer buf(&exec_ctx.get_allocator());
+      if (OB_FAIL(fields->print(buf, 0))) {
       } else {
-        ++csv_ctx->curr_row_;
+        ObString row_json = buf.string();
+        if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res, row_json))) {
+        } else {
+          ++csv_ctx->curr_row_;
+        }
       }
     }
   }

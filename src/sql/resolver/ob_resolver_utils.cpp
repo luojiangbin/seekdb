@@ -2655,6 +2655,9 @@ bool ObResolverUtils::is_expr_can_be_used_in_table_function(const ObRawExpr &exp
   } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()) {
     // for generator(N) stream function
     bret = true;
+  } else if (T_FUN_SYS_READ_CSV == expr.get_expr_type()) {
+    // for read_csv(path) file table function
+    bret = true;
   }
   return bret;
 }

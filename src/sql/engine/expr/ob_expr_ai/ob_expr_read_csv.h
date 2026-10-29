@@ -24,8 +24,9 @@ namespace oceanbase
 namespace sql
 {
 
-// read_csv(path[, options]) 表函数：逐行读出 CSV 文件的记录。
-// 每行返回一个 JSON 数组（列值序列），供函数表算子生成多列。
+// read_csv(path[, options]) table function: yields one CSV record per row.
+// Each row is emitted as JSON array text (column values), so the function
+// table operator can produce multiple columns from it.
 class ObExprReadCSV : public ObFuncExprOperator
 {
 public:
