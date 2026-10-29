@@ -46,7 +46,8 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        owns_dicts_(true)
   {
   }
 
@@ -73,6 +74,10 @@ private:
 
 private:
   int init_dict(const ObFTParserParam &param);
+
+  // Build the dictionaries through the thread level cache so that the expensive
+  // dictionary load is done once per thread instead of once per tokenize call.
+  int init_cached_dict();
 
   int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
 
@@ -106,6 +111,9 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  // True when this parser owns the dictionaries. With the thread level dictionary
+  // cache the dictionaries are shared and must not be released in reset().
+  bool owns_dicts_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
