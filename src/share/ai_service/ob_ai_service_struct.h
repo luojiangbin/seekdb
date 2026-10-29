@@ -49,6 +49,7 @@ public:
     request_transform_fn_.reset();
     response_transform_fn_.reset();
     endpoint_id_ = OB_INVALID_ID;
+    max_concurrency_ = DEFAULT_MAX_CONCURRENCY;
   }
 
   int parse_from_json_base(common::ObArenaAllocator &allocator,const ObString &name, const common::ObIJsonBase &params_jbase);
@@ -69,6 +70,7 @@ public:
   const ObString &get_response_transform_fn() const { return response_transform_fn_; }
   uint64_t get_endpoint_id() const { return endpoint_id_; }
   void set_endpoint_id(uint64_t endpoint_id) { endpoint_id_ = endpoint_id; }
+  int64_t get_max_concurrency() const { return max_concurrency_; }
 
   TO_STRING_KV(K_(name),
                K_(scope),
@@ -80,9 +82,14 @@ public:
                K_(request_model_name),
                K_(parameters),
                K_(request_transform_fn),
-               K_(response_transform_fn));
+               K_(response_transform_fn),
+               K_(max_concurrency));
 private:
   static const ObString DEFAULT_SCOPE;
+  // Default number of concurrent model calls allowed for one endpoint.
+  static const int64_t DEFAULT_MAX_CONCURRENCY = 8;
+  static const int64_t MIN_MAX_CONCURRENCY = 1;
+  static const int64_t MAX_MAX_CONCURRENCY = 1024;
   static bool is_valid_provider(const ObString &provider);
   // 本地部署 provider（如 Ollama）不需要 access key
   static bool is_keyless_provider(const ObString &provider);
@@ -100,6 +107,7 @@ private:
   ObString parameters_;
   ObString request_transform_fn_;
   ObString response_transform_fn_;
+  int64_t max_concurrency_;
 };
 
 } // namespace share
