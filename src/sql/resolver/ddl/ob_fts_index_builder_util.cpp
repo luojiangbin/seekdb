@@ -1051,7 +1051,8 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
         // Building the inverted index tables is CPU bound: splitting the base
         // table range into several tasks makes the build scale with the cores.
-        decided_parallelism = MAX(original_parallelism / 3, 4L);
+        // Cap the split by the online cores so small machines are not flooded.
+        decided_parallelism = MAX(original_parallelism / 3, 8L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:
