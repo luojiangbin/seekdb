@@ -248,6 +248,10 @@ int ObExprReadCSV::eval_read_csv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     } else if (OB_FAIL(read_whole_file(exec_ctx.get_allocator(), path, csv_ctx->content_))) {
     } else if (OB_FAIL(split_lines(exec_ctx.get_allocator(), csv_ctx->content_, csv_ctx->rows_))) {
     } else {
+      // the first line is the header, skip it
+      if (csv_ctx->rows_.count() > 0) {
+        csv_ctx->curr_row_ = 1;
+      }
       csv_ctx->loaded_ = true;
     }
   }
