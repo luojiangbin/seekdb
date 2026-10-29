@@ -206,12 +206,20 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ctx_.check_status())) {
-  } else if (OB_FAIL(MY_SPEC.value_expr_->eval(eval_ctx_, value))) {
-    if (OB_ITER_END != ret) {
-    }
+  } else if (OB_ISNULL(MY_SPEC.value_expr_)) {
+    ret = OB_ERR_UNEXPECTED;
   } else {
-    MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
-    MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);
+    // The value expression of a function table is evaluated once per row, but it is
+    // not part of calc_exprs_ so its evaluated flag would otherwise stay set and the
+    // first row would be returned repeatedly. Clear it explicitly for each row.
+    MY_SPEC.value_expr_->get_eval_info(eval_ctx_).clear_evaluated_flag();
+    if (OB_FAIL(MY_SPEC.value_expr_->eval(eval_ctx_, value))) {
+      if (OB_ITER_END != ret) {
+      }
+    } else {
+      MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
+      MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);
+    }
   }
   return ret;
 }
