@@ -161,15 +161,26 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr,
   INIT_SUCC(ret);
   ObDatum *result = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  // Constant arguments (literals/params) have no per-row datum vector, evaluate them
+  // once and reuse the value for every row.
+  ObDatum *const_model_datum = nullptr;
+  ObDatum *const_content_datum = nullptr;
+  ObDatum *const_dim_datum = nullptr;
+  bool model_is_batch = expr.args_[MODEL_IDX]->is_batch_result();
+  bool content_is_batch = expr.args_[CONTENT_IDX]->is_batch_result();
+  bool dim_is_batch = expr.arg_cnt_ == 3 && expr.args_[DIM_IDX]->is_batch_result();
   if (OB_ISNULL(result)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(expr.args_[MODEL_IDX]->eval_batch(ctx, skip, batch_size))) {
-  } else if (OB_FAIL(expr.args_[CONTENT_IDX]->eval_batch(ctx, skip, batch_size))) {
-  } else if (expr.arg_cnt_ == 3 && OB_FAIL(expr.args_[DIM_IDX]->eval_batch(ctx, skip, batch_size))) {
+  } else if (!model_is_batch && OB_FAIL(expr.args_[MODEL_IDX]->eval(ctx, const_model_datum))) {
+  } else if (!content_is_batch && OB_FAIL(expr.args_[CONTENT_IDX]->eval(ctx, const_content_datum))) {
+  } else if (expr.arg_cnt_ == 3 && !dim_is_batch && OB_FAIL(expr.args_[DIM_IDX]->eval(ctx, const_dim_datum))) {
+  } else if (model_is_batch && OB_FAIL(expr.args_[MODEL_IDX]->eval_batch(ctx, skip, batch_size))) {
+  } else if (content_is_batch && OB_FAIL(expr.args_[CONTENT_IDX]->eval_batch(ctx, skip, batch_size))) {
+  } else if (dim_is_batch && OB_FAIL(expr.args_[DIM_IDX]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatum *model_datums = expr.args_[MODEL_IDX]->locate_batch_datums(ctx);
-    ObDatum *content_datums = expr.args_[CONTENT_IDX]->locate_batch_datums(ctx);
-    ObDatum *dim_datums = expr.arg_cnt_ == 3 ? expr.args_[DIM_IDX]->locate_batch_datums(ctx) : nullptr;
+    ObDatum *model_datums = model_is_batch ? expr.args_[MODEL_IDX]->locate_batch_datums(ctx) : nullptr;
+    ObDatum *content_datums = content_is_batch ? expr.args_[CONTENT_IDX]->locate_batch_datums(ctx) : nullptr;
+    ObDatum *dim_datums = dim_is_batch ? expr.args_[DIM_IDX]->locate_batch_datums(ctx) : nullptr;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
@@ -182,21 +193,24 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr,
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
       }
-      if (OB_ISNULL(model_datums) || OB_ISNULL(content_datums)) {
+      ObDatum *model_datum = model_is_batch ? &model_datums[j] : const_model_datum;
+      ObDatum *content_datum = content_is_batch ? &content_datums[j] : const_content_datum;
+      ObDatum *dim_datum = dim_is_batch ? &dim_datums[j] : const_dim_datum;
+      if (OB_ISNULL(model_datum) || OB_ISNULL(content_datum)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (model_datums[j].is_null() || content_datums[j].is_null()) {
+      } else if (model_datum->is_null() || content_datum->is_null()) {
         // NULL 输入传播为 NULL 结果
         result[j].set_null();
         eval_flags.set(j);
       } else {
         if (!has_batch_row) {
-          model_id = model_datums[j].get_string();
-          if (OB_NOT_NULL(dim_datums) && !dim_datums[j].is_null()) {
-            dim = dim_datums[j].get_int();
+          model_id = model_datum->get_string();
+          if (OB_NOT_NULL(dim_datum) && !dim_datum->is_null()) {
+            dim = dim_datum->get_int();
           }
           has_batch_row = true;
         }
-        if (OB_FAIL(contents.push_back(content_datums[j].get_string()))) {
+        if (OB_FAIL(contents.push_back(content_datum->get_string()))) {
         } else if (OB_FAIL(row_indexes.push_back(j))) {
         }
       }
