@@ -562,6 +562,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.cpp",
+            "src/sql/engine/expr/ob_expr_ai/ob_expr_read_csv.cpp",
         ],
     ),
     struct(
