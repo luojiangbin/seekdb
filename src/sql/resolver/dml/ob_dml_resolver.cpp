@@ -2724,6 +2724,13 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         }
         break;
       }
+      case T_FILE_SCAN_TABLE:
+      case T_FILE_LIST_TABLE:
+      case T_FILE_SCHEMA_TABLE: {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "file table scan");
+        break;
+      }
       default:
         /* won't be here */
         ret = OB_ERR_PARSER_SYNTAX;

@@ -284,7 +284,10 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"field_delimiter", FIELD_DELIMITER},
   {"file", FILEX},
   {"file_extension", FILE_EXTENSION},
-  {"file_id", FILE_ID},
+  {"file_id", FILE_ID},  {"file_list", FILE_LIST},
+  {"file_scan", FILE_SCAN},
+  {"file_schema", FILE_SCHEMA},
+
   {"files", FILES},
   {"filter", FILTER},
   {"first", FIRST},
@@ -316,7 +319,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"geomcollection", GEOMCOLLECTION},
   {"geometrycollection", GEOMETRYCOLLECTION},
   {"get", GET},
-  {"get_format", GET_FORMAT},
+  {"get_format", GET_FORMAT},  {"glob", GLOB},
+
   {"global", GLOBAL},
   {"grant", GRANT},
   {"grants", GRANTS},
@@ -642,8 +646,11 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"rank", RANK},
   {"read", READ},
   {"read_write", READ_WRITE},
-  {"read_consistency", READ_CONSISTENCY},
-  {"read_only", READ_ONLY},
+  {"read_consistency", READ_CONSISTENCY},  {"read_csv", READ_CSV},  {"read_json", READ_JSON},
+
+
+  {"read_only", READ_ONLY},  {"read_parquet", READ_PARQUET},
+
   {"reads", READS},
   {"real", REAL},
   {"recover", RECOVER},
