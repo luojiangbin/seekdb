@@ -11130,8 +11130,15 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
   ObFileScanKind kind = ObFileScanKind::INVALID;
   ObFileFormat format = ObFileFormat::AUTO;
 
+  bool file_sql_enabled = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(session_info_->get_sys_variable(SYS_VAR_ENABLE_FILE_SQL, file_sql_enabled))) {
+    LOG_WARN("failed to get enable_file_sql", K(ret));
+  } else if (!file_sql_enabled) {
+    // Reading a local file as a table is off unless the session enables it.
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "file sql is disabled");
   } else if (parse_tree.num_child_ < 4 || OB_ISNULL(parse_tree.children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected file table node", K(ret), K(parse_tree.num_child_));
