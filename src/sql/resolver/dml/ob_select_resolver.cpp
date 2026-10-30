@@ -1654,6 +1654,24 @@ int ObSelectResolver::expand_target_list(
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(resolve_all_json_table_columns(table_item, &column_items))) {
     }
+  } else if (table_item.is_file_table()) {
+    // A file table exposes exactly the column items created from its inferred
+    // schema; pick the ones that belong to this table id.
+    if (OB_ISNULL(get_stmt())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const ObIArray<ColumnItem> &all_columns = get_stmt()->get_column_items();
+      for (int64_t i = 0; OB_SUCC(ret) && i < all_columns.count(); ++i) {
+        if (all_columns.at(i).table_id_ == table_item.table_id_
+            && OB_FAIL(column_items.push_back(all_columns.at(i)))) {
+          LOG_WARN("failed to push back file table column", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && column_items.empty()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("file table has no columns", K(ret), K(table_item.table_id_));
+      }
+    }
   } else if (table_item.is_values_table()) {
     if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(get_stmt()->get_column_size() == 0)) {
       ret = OB_ERR_UNEXPECTED;

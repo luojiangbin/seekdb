@@ -5958,6 +5958,11 @@ bool oceanbase::sql::Path::is_function_table_path() const
   return NULL != parent_ && parent_->get_type() == FUNCTION_TABLE_ACCESS;
 }
 
+bool oceanbase::sql::Path::is_file_scan_path() const
+{
+  return NULL != parent_ && parent_->get_type() == FILE_TABLE_ACCESS;
+}
+
 bool oceanbase::sql::Path::is_json_table_path() const
 {
   return NULL != parent_ && parent_->get_type() == JSON_TABLE_ACCESS;
@@ -8335,6 +8340,8 @@ int ObJoinOrder::init_base_join_order(const TableItem *table_item)
       set_type(JSON_TABLE_ACCESS);
     } else if (table_item->is_values_table()) {
       set_type(VALUES_TABLE_ACCESS);
+    } else if (table_item->is_file_table()) {
+      set_type(FILE_TABLE_ACCESS);
     } else if (table_item->is_lateral_table()) {
       set_type(SUBQUERY);
     } else {
@@ -8349,6 +8356,8 @@ int ObJoinOrder::generate_base_paths()
   int ret = OB_SUCCESS;
   if (FAKE_CTE_TABLE_ACCESS == get_type()) {
     ret = generate_cte_table_paths();
+  } else if (FILE_TABLE_ACCESS == get_type()) {
+    ret = generate_file_table_paths();
   } else if (FUNCTION_TABLE_ACCESS == get_type()) {
     ret = generate_function_table_paths();
   } else if (JSON_TABLE_ACCESS == get_type()) {
@@ -8493,6 +8502,54 @@ int ObJoinOrder::generate_json_table_default_val(ObIArray<ObExecParamRawExpr *> 
         if (OB_FAIL(nl_param.push_back(t_nl_param.at(i)))) {
         }
       }
+    }
+  }
+  return ret;
+}
+
+int FileScanPath::estimate_cost()
+{
+  int ret = OB_SUCCESS;
+  op_cost_ = 1.0;
+  cost_ = 1.0;
+  return ret;
+}
+
+int ObJoinOrder::generate_file_table_paths()
+{
+  int ret = OB_SUCCESS;
+  FileScanPath *file_path = NULL;
+  const ObDMLStmt *stmt = NULL;
+  const TableItem *table_item = NULL;
+  if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt()) || OB_ISNULL(allocator_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(table_item = stmt->get_table_item_by_id(table_id_)) ||
+             !table_item->is_file_table() ||
+             OB_ISNULL(table_item->file_table_def_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid file table item", K(ret));
+  } else if (OB_ISNULL(file_path = static_cast<FileScanPath *>(
+                           allocator_->alloc(sizeof(FileScanPath))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    file_path = new (file_path) FileScanPath();
+    file_path->table_id_ = table_id_;
+    file_path->parent_ = this;
+    output_rows_ = table_item->file_table_def_->rows_ > 0
+        ? table_item->file_table_def_->rows_ : 1;
+    output_row_size_ = 32;
+    file_path->strong_sharding_ = get_plan()->get_optimizer_context().get_match_all_sharding();
+    if (OB_FAIL(file_path->set_parallel_info_for_match_all())) {
+      LOG_WARN("failed to set parallel info", K(ret));
+    } else if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(),
+                                                                file_path->subquery_exprs_,
+                                                                file_path->filter_,
+                                                                false))) {
+      LOG_WARN("failed to classify subquery exprs", K(ret));
+    } else if (OB_FAIL(file_path->estimate_cost())) {
+      LOG_WARN("failed to estimate cost", K(ret));
+    } else if (OB_FAIL(add_path(file_path))) {
+      LOG_WARN("failed to add file scan path", K(ret));
     }
   }
   return ret;
