@@ -11260,6 +11260,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       item->table_id_ = generate_table_id();
+      item->ref_id_ = item->table_id_;
       item->table_name_ = alias_name;
       item->alias_name_ = alias_name;
       item->type_ = TableItem::FILE_TABLE;
@@ -11294,18 +11295,26 @@ int ObDMLResolver::gen_file_table_column_items(const ObFileTableDef &file_def, T
       } else if (OB_ISNULL(column_expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObExprResType result_type;
-        result_type.set_type(obj_type);
+        ObObjMeta column_meta;
+        ObAccuracy column_accuracy;
+        column_meta.set_type(obj_type);
+        column_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[obj_type];
         if (ObVarcharType == obj_type) {
-          result_type.set_length(length);
-          result_type.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-          result_type.set_collation_level(CS_LEVEL_IMPLICIT);
+          column_meta.set_collation_type(session_info_->get_local_collation_connection());
+          column_meta.set_collation_level(CS_LEVEL_IMPLICIT);
+          column_accuracy.set_length(static_cast<ObLength>(std::max<int64_t>(1, length)));
         }
+        ObExprResType result_type;
+        result_type.set_meta(column_meta);
+        result_type.set_accuracy(column_accuracy);
 
         column_expr->set_result_type(result_type);
         column_expr->set_ref_id(table_item.table_id_, i + OB_APP_MIN_COLUMN_ID);
         column_expr->set_column_attr(table_item.get_table_name(), def_col.column_name_);
+        column_expr->set_database_name(table_item.database_name_);
         if (OB_FAIL(column_expr->add_flag(IS_COLUMN))) {
+        } else if (OB_FAIL(column_expr->extract_info())) {
+          LOG_WARN("failed to extract file column info", K(ret));
         } else {
           ColumnItem column_item;
           column_item.expr_ = column_expr;
