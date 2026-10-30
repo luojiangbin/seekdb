@@ -62,7 +62,8 @@ public:
       : ObOperator(exec_ctx, spec, input),
         reader_(),
         schema_(),
-        opened_(false) {}
+        opened_(false),
+        cur_cells_() {}
   virtual ~ObFileScanOp() {}
 
   virtual int inner_open() override;
@@ -79,6 +80,9 @@ private:
   ObFileScanReader reader_;
   std::vector<ObFileColumnSchema> schema_;
   bool opened_;
+  // Holds the cells of the row currently being returned: the output datums
+  // point into these strings, so they must outlive inner_get_next_row().
+  std::vector<ObFileCell> cur_cells_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFileScanOp);
 };

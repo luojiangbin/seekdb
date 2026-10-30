@@ -5510,6 +5510,8 @@ int ObStaticEngineCG::generate_spec(ObLogFileScan &op, ObFileScanSpec &spec,
     LOG_WARN("failed to init file source names", K(ret));
   } else if (OB_FAIL(ob_write_string(alloc, file_def->canonical_path_, spec.file_path_))) {
     LOG_WARN("failed to copy the file path", K(ret));
+  } else if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs()))) {
+    LOG_WARN("failed to mark the file scan output exprs", K(ret));
   } else {
     spec.format_ = static_cast<int32_t>(file_def->format_);
     spec.device_ = file_def->device_;

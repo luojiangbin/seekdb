@@ -63,6 +63,11 @@ int ObLogFileScan::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 int ObLogFileScan::allocate_expr_post(ObAllocExprContext &ctx)
 {
   int ret = OB_SUCCESS;
+  // The access expressions have to exist before the expressions are marked as
+  // produced, otherwise the code generator cannot columnlize them.
+  if (access_exprs_.empty() && OB_FAIL(generate_access_exprs())) {
+    LOG_WARN("failed to generate access exprs", K(ret));
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < access_exprs_.count(); ++i) {
     ObRawExpr *value_col = access_exprs_.at(i);
     if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {

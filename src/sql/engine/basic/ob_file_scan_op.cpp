@@ -57,7 +57,6 @@ int ObFileScanOp::inner_open()
   const ObFileScanSpec &spec = static_cast<const ObFileScanSpec &>(spec_);
   opened_ = false;
   if (OB_FAIL(build_schema())) {
-    LOG_WARN("failed to build file scan schema", K(ret));
   } else {
     const std::string path(spec.file_path_.ptr(), spec.file_path_.length());
     const int iret = reader_.open(path, static_cast<ObFileFormat>(spec.format_), schema_,
@@ -95,7 +94,7 @@ int ObFileScanOp::fill_row(const std::vector<ObFileCell> &cells)
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < spec.output_.count(); ++i) {
       ObExpr *expr = spec.output_.at(i);
-      ObDatum &datum = expr->locate_expr_datum(eval_ctx_);
+      ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
       const ObFileCell &cell = cells.at(i);
       if (cell.is_null_) {
         datum.set_null();
@@ -117,6 +116,7 @@ int ObFileScanOp::fill_row(const std::vector<ObFileCell> &cells)
             break;
         }
       }
+      expr->set_evaluated_projected(eval_ctx_);
     }
   }
   return ret;
@@ -126,14 +126,14 @@ int ObFileScanOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
-  std::vector<ObFileCell> cells;
-  const int iret = reader_.get_next_row(cells);
+  cur_cells_.clear();
+  const int iret = reader_.get_next_row(cur_cells_);
   if (OB_ITER_END == iret) {
     ret = OB_ITER_END;
   } else if (OB_SUCCESS != iret) {
     ret = iret;
     LOG_WARN("failed to read the next file row", K(ret));
-  } else if (OB_FAIL(fill_row(cells))) {
+  } else if (OB_FAIL(fill_row(cur_cells_))) {
     LOG_WARN("failed to fill the output row", K(ret));
   }
   return ret;
