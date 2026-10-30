@@ -1160,6 +1160,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_exchange.cpp",
             "src/sql/optimizer/ob_log_expr_values.cpp",
             "src/sql/optimizer/ob_log_for_update.cpp",
+            "src/sql/optimizer/ob_log_file_scan.cpp",
             "src/sql/optimizer/ob_log_function_table.cpp",
             "src/sql/optimizer/ob_log_granule_iterator.cpp",
             "src/sql/optimizer/ob_log_group_by.cpp",
