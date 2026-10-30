@@ -29,6 +29,8 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
+#include "sql/optimizer/ob_log_file_scan.h"
+#include "sql/engine/basic/ob_file_scan_op.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
@@ -5492,6 +5494,40 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   return ret;
 }
 
+int ObStaticEngineCG::generate_spec(ObLogFileScan &op, ObFileScanSpec &spec,
+                                    const bool in_root_job)
+{
+  UNUSED(in_root_job);
+  int ret = OB_SUCCESS;
+  ObIAllocator &alloc = phy_plan_->get_allocator();
+  const ObFileTableDef *file_def = op.get_file_table_def();
+  if (OB_ISNULL(file_def) || OB_ISNULL(op.get_stmt())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid logical file scan", K(ret), KP(file_def));
+  } else if (OB_FAIL(spec.column_types_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file column types", K(ret));
+  } else if (OB_FAIL(spec.source_names_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file source names", K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, file_def->canonical_path_, spec.file_path_))) {
+    LOG_WARN("failed to copy the file path", K(ret));
+  } else {
+    spec.format_ = static_cast<int32_t>(file_def->format_);
+    spec.device_ = file_def->device_;
+    spec.inode_ = file_def->inode_;
+    spec.file_size_ = file_def->file_size_;
+    spec.modified_time_ns_ = file_def->modified_time_ns_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < file_def->columns_.count(); ++i) {
+      if (OB_FAIL(spec.column_types_.push_back(
+              static_cast<int32_t>(file_def->columns_.at(i).type_)))) {
+        LOG_WARN("failed to push back the column type", K(ret));
+      } else if (OB_FAIL(spec.source_names_.push_back(file_def->columns_.at(i).source_name_))) {
+        LOG_WARN("failed to push back the source name", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec &spec,
     const bool in_root_job)
 {
@@ -6117,6 +6153,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_FUNCTION_TABLE: {
       type = PHY_FUNCTION_TABLE;
+      break;
+    }
+    case log_op_def::LOG_FILE_SCAN: {
+      type = PHY_FILE_SCAN;
       break;
     }
     case log_op_def::LOG_JSON_TABLE: {
