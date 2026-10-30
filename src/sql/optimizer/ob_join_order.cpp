@@ -8548,6 +8548,8 @@ int ObJoinOrder::generate_file_table_paths()
       LOG_WARN("failed to classify subquery exprs", K(ret));
     } else if (OB_FAIL(file_path->estimate_cost())) {
       LOG_WARN("failed to estimate cost", K(ret));
+    } else if (OB_FAIL(create_plan_for_path_with_subq(file_path))) {
+      LOG_WARN("failed to create file table plan with subquery", K(ret));
     } else if (OB_FAIL(add_path(file_path))) {
       LOG_WARN("failed to add file scan path", K(ret));
     }
